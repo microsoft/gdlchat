@@ -1,0 +1,166 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@implements IDisposable
+@inject global::gdlchat.Services.CopilotChatClient Agent
+@inject ILogger<Home> Logger
+
+<PageTitle>Chat</PageTitle>
+
+<section class="chat" aria-labelledby="chat-title">
+	<header class="chat-header">
+		<div>
+			<h1 id="chat-title">Chat</h1>
+			<p class="connection-status" role="status"><span aria-hidden="true"></span>@ConnectionStatus</p>
+		</div>
+		<button type="button" class="clear-button" @onclick="ClearConversation" disabled="@(isSending || messages.Count == 0)">
+			Clear conversation
+		</button>
+	</header>
+
+	<div class="conversation" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions" tabindex="0">
+		@if (messages.Count == 0)
+		{
+			<div class="empty-state">
+				<span class="chat-mark" aria-hidden="true">&#8943;</span>
+				<h2>What's on your mind?</h2>
+			</div>
+		}
+		else
+		{
+			@foreach (var message in messages)
+			{
+				<article class="message @(message.IsAgent ? "agent-message" : "")" @key="message.Id">
+					<div class="message-meta">
+						<span>@(message.IsAgent ? "Agent" : "You")</span>
+						<time datetime="@message.SentAt.ToString("O")">@message.SentAt.ToString("HH:mm 'UTC'")</time>
+					</div>
+					<p>@message.Text</p>
+				</article>
+			}
+		}
+		@if (isSending)
+		{
+			<div class="agent-progress" role="status">
+				<span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+				<span>@(isAgentTyping ? "Agent is typing..." : "Waiting for agent...")</span>
+			</div>
+		}
+	</div>
+
+	@if (errorMessage is not null)
+	{
+		<p class="chat-error" role="alert">@errorMessage</p>
+	}
+
+	<form class="composer" @onsubmit="SendMessage" @onsubmit:preventDefault>
+		<label class="visually-hidden" for="chat-message">Message</label>
+		<input id="chat-message" type="text" placeholder="Type a message..." autocomplete="off"
+			   maxlength="4000" @bind="draft" @bind:event="oninput" @ref="messageInput" disabled="@isSending" />
+		<button type="submit" class="send-button" disabled="@(isSending || string.IsNullOrWhiteSpace(draft))" aria-label="Send message" title="Send message">
+			<span aria-hidden="true">&#8593;</span>
+		</button>
+	</form>
+</section>
+
+@code {
+	private readonly List<ChatMessage> messages = [];
+	private readonly CancellationTokenSource lifetime = new();
+	private string draft = string.Empty;
+	private string? errorMessage;
+	private bool isSending;
+	private bool isAgentTyping;
+	private bool isConnected;
+	private bool focusInput;
+	private ElementReference messageInput;
+	private string ConnectionStatus => isAgentTyping ? "Agent is typing..."
+		: isSending ? "Waiting for agent..."
+		: errorMessage is not null ? "Connection error"
+		: isConnected ? "Connected" : "New conversation";
+
+	private async Task SendMessage()
+	{
+		if (isSending || string.IsNullOrWhiteSpace(draft))
+		{
+			return;
+		}
+
+		var question = draft.Trim();
+		messages.Add(new ChatMessage(Guid.NewGuid(), question, DateTimeOffset.UtcNow, false));
+		draft = string.Empty;
+		errorMessage = null;
+		isSending = true;
+		using var request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+		request.CancelAfter(TimeSpan.FromSeconds(90));
+		try
+		{
+			await foreach (var reply in Agent.SendAsync(question, request.Token, typing => InvokeAsync(() =>
+			{
+				isAgentTyping = typing;
+				StateHasChanged();
+			})))
+			{
+				messages.Add(new ChatMessage(Guid.NewGuid(), reply, DateTimeOffset.UtcNow, true));
+				await InvokeAsync(StateHasChanged);
+			}
+			isConnected = true;
+		}
+		catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+		{
+		}
+		catch (OperationCanceledException)
+		{
+			errorMessage = "The agent took too long to respond. Please try again.";
+		}
+			  catch (global::gdlchat.Services.ChatGatewayException exception)
+		{
+			Logger.LogWarning("Chat gateway request failed: {Reason}", exception.Message);
+			errorMessage = exception.Message;
+		}
+		catch (Azure.Identity.AuthenticationFailedException exception)
+		{
+			Logger.LogError(exception, "Copilot Studio authentication failed.");
+			errorMessage = "The server could not authenticate with the agent. Check the server credentials and agent permissions.";
+		}
+		catch (Exception exception)
+		{
+			Logger.LogError(exception, "Copilot Studio request failed.");
+			errorMessage = "Unable to reach the agent. Check the agent configuration and try again.";
+		}
+		finally
+		{
+			isAgentTyping = false;
+			isSending = false;
+			focusInput = !lifetime.IsCancellationRequested;
+		}
+	}
+
+	private void ClearConversation()
+	{
+		if (isSending)
+		{
+			return;
+		}
+
+		messages.Clear();
+		Agent.ResetConversation();
+		errorMessage = null;
+		isConnected = false;
+		focusInput = true;
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (focusInput)
+		{
+			focusInput = false;
+			await messageInput.FocusAsync(preventScroll: true);
+		}
+	}
+
+	public void Dispose()
+	{
+		lifetime.Cancel();
+	}
+
+	private sealed record ChatMessage(Guid Id, string Text, DateTimeOffset SentAt, bool IsAgent);
+}

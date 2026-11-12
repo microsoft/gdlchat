@@ -1,0 +1,13 @@
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_HTTP_PORTS=8080
+CopilotStudioAgent__ConnectionMode=DirectLine
+CopilotStudioAgent__TokenEndpoint=https://577b4755cf12e3f2962fa5528e11fa.0c.environment.api.powerplatform.com/copilotstudio/agenticruntime/botsbyschema/ppa_hiringagent_yRV7uI/directline/token?api-version=2022-03-01-preview
+CopilotStudioAgent__DirectLineEndpoint=https://unitedstates.directline.botframework.com/v3/directline
+CopilotStudioAgent__EnvironmentId=577b4755-cf12-e3f2-962f-a5528e11fa0c
+CopilotStudioAgent__SchemaName=ppa_hiringagent_yRV7uI
+CopilotStudioAgent__AuthenticationMode=Default
+CopilotStudioAgent__TenantId=e0609078-8b1f-4b6b-a7dc-5928feee8194
+CopilotStudioAgent__AppClientId=af55e630-a31c-407b-a733-c5ae188b49d7
+Logging__LogLevel__Default=Information
+Logging__LogLevel__Microsoft.AspNetCore=Warning
+AllowedHosts=*

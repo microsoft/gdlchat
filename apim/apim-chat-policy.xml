@@ -1,0 +1,49 @@
+<policies>
+    <inbound>
+        <base />
+        <choose>
+            <when condition="@(context.Subscription == null)">
+                <return-response>
+                    <set-status code="401" reason="Unauthorized" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/problem+json</value>
+                    </set-header>
+                    <set-body>{"status":401,"title":"A server application subscription is required."}</set-body>
+                </return-response>
+            </when>
+        </choose>
+        <rate-limit-by-key calls="30" renewal-period="60" counter-key='@("chat-api:" + context.Subscription.Id)' />
+        <validate-content unspecified-content-type-action="prevent" max-size="32768" size-exceeded-action="prevent">
+            <content type="application/json" validate-as="json" action="prevent" allow-additional-properties="false" />
+        </validate-content>
+        <choose>
+            <when condition='@(((string)context.Request.Body.As&lt;JObject&gt;(preserveContent: true)["message"] ?? string.Empty).ToLowerInvariant().Contains("policy-block-test"))'>
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/problem+json</value>
+                    </set-header>
+                    <set-body>{"status":403,"title":"This message was blocked by the chat policy."}</set-body>
+                </return-response>
+            </when>
+        </choose>
+        <set-header name="X-Chat-Backend-Key" exists-action="override">
+            <value>{{chat-backend-key}}</value>
+        </set-header>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+        <validate-content unspecified-content-type-action="ignore" max-size="262144" size-exceeded-action="prevent">
+            <content type="application/json" validate-as="json" action="prevent" allow-additional-properties="false" />
+        </validate-content>
+        <set-header name="Cache-Control" exists-action="override">
+            <value>no-store</value>
+        </set-header>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

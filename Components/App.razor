@@ -1,0 +1,46 @@
+﻿@inject IConfiguration Configuration
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="@(UseAPIM ? "/chat/" : "/")" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["gdlchat.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <ReconnectModal />
+    @if (UseAPIM)
+    {
+        <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+        <script>
+            const webSocketsTransport = 1;
+            Blazor.start({
+                circuit: {
+                    configureSignalR: builder => builder.withUrl(
+                        new URL("_blazor", document.baseURI).href,
+                        { transport: webSocketsTransport, skipNegotiation: true })
+                }
+            }).catch(error => console.error("Blazor connection failed.", error));
+        </script>
+    }
+    else
+    {
+        <script src="@Assets["_framework/blazor.web.js"]"></script>
+    }
+</body>
+
+</html>
+
+@code {
+    private bool UseAPIM => Configuration.GetValue<bool>("useAPIM");
+}

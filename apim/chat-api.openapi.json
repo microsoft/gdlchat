@@ -1,0 +1,102 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Chat Turns",
+    "version": "1.0.0",
+    "description": "One complete chat turn per HTTP request. APIM injects the private backend credential."
+  },
+  "servers": [
+    { "url": "https://sas-chat.bluewater-93a859da.northcentralusstage.azurecontainerapps.io/chat/api/chat" }
+  ],
+  "security": [{ "ApimSubscription": [] }],
+  "paths": {
+    "/messages": {
+      "post": {
+        "operationId": "CreateChatTurn",
+        "summary": "Send a message and receive completed agent replies",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateChatTurnRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete agent turn, subject to APIM outbound policies",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatTurnResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" },
+          "410": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" },
+          "502": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" },
+          "504": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApimSubscription": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Ocp-Apim-Subscription-Key"
+      }
+    },
+    "schemas": {
+      "CreateChatTurnRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message"],
+        "properties": {
+          "conversationId": { "type": "string", "format": "uuid", "nullable": true },
+          "message": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        }
+      },
+      "ChatTurnResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversationId", "messages"],
+        "properties": {
+          "conversationId": { "type": "string", "format": "uuid" },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": { "type": "string", "minLength": 1, "maxLength": 32000 }
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "Request rejected or conversation unavailable; no automatic retry",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+          }
+        }
+      }
+    }
+  }
+}
