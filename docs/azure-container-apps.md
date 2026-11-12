@@ -2,7 +2,7 @@
 
 This guide deploys the Copilot Studio Chat image to Azure Container Apps. First
 create the registry and push an image using
-[Azure Container Registry](azure-container-registry.md).
+[Azure Container Registry (ACR)](azure-container-registry.md).
 
 The examples use a user-assigned managed identity for image pulls, one replica
 for the in-memory conversation backend, and external HTTPS ingress. Restrict
@@ -14,8 +14,8 @@ publicly.
 Follow Microsoft's [Azure Container Apps CLI tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-deploy-first-app-cli)
 for Azure CLI setup and environment provisioning. For private image
 authentication, use the [managed identity image-pull guide](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
-Create a user-assigned identity, grant it the `AcrPull` role on this project's
-registry, and use that identity for the registry pull.
+Create a user-assigned identity, grant it the registry-pull (`AcrPull`) role on
+this project's registry, and use that identity for the registry pull.
 
 Ensure the image is available in ACR. These values must match the registry
 deployment:
@@ -36,7 +36,7 @@ export VERSION="v1"
 After creating the environment and assigning `AcrPull`, deploy the image with
 the identity configured for registry access. The app listens on port `8080`.
 `useAPIM=true` configures the app to serve its UI under `/chat/`; it does not
-enable APIM message routing.
+enable Azure API Management (APIM) message routing.
 
 ```bash
 ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)
@@ -68,7 +68,10 @@ conversation state.
 
 ## Configure APIM message routing
 
-If the chat API and its policies are configured, follow Microsoft's
+To send chat turns through APIM, first create a separate chat API and configure
+its subscription, backend credential, and request/response policies. Follow the
+[Azure API Management guide](azure-api-management.md) for those steps. Once the
+API and policies are ready, follow Microsoft's
 [Container Apps secrets guide](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
 to create these secrets in the Container App's **Secrets** page:
 
@@ -94,7 +97,7 @@ az containerapp update \
 
 Replace `<apim-host>` with the APIM gateway hostname. Keep
 `ChatGateway__Enabled=false` until the API and policies are ready. See
-[Azure API Management](azure-api-management.md) for APIM configuration.
+[Azure API Management](azure-api-management.md) for details.
 
 ## Verify and update the deployment
 

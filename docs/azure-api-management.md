@@ -1,8 +1,9 @@
 # Azure API Management
 
-APIM can serve the Blazor UI and route chat messages through policies. These
-roles use separate APIs and settings. For the Container App ingress and
-environment variables, see
+Azure API Management (APIM) can serve the Blazor UI and route chat messages
+through policies. Serving the UI and routing messages are separate
+configurations; you can enable either or both. For the Azure Container Apps
+(ACA) ingress and environment variables, see
 [Azure Container Apps](azure-container-apps.md).
 
 If you do not already have an APIM instance, follow Microsoft's
@@ -69,13 +70,16 @@ Blazor server -> APIM POST /chat-api/messages
 ### Configure the chat API
 
 1. Import [the OpenAPI definition](../apim/chat-api.openapi.json) as a **new
-   OpenAPI API**, separate from `chat-web` and `chatsocket`. Use API URL suffix
-   `chat-api` and backend URL `https://<aca-host>/chat/api/chat`. The import
-   creates `POST /messages` and its request/response schemas. For the APIM
-   import workflow, see Microsoft's [OpenAPI import guide](https://learn.microsoft.com/en-us/azure/api-management/import-api-from-oas).
-2. Leave **Subscription required** on. Create a dedicated, active API-scoped
-   subscription for the Blazor server. Keep subscription requirements off on
-   the public UI APIs. No chat-user login is needed.
+   OpenAPI API** for chat message routing. Use API URL suffix `chat-api` and
+   backend URL `https://<aca-host>/chat/api/chat`. The import creates
+   `POST /messages` and its request/response schemas. This is separate from the
+   optional UI routing described in [Serve the Blazor UI](#serve-the-blazor-ui).
+   For the APIM import workflow, see Microsoft's
+   [OpenAPI import guide](https://learn.microsoft.com/en-us/azure/api-management/import-api-from-oas).
+2. Leave **Subscription required** on for `chat-api`. Create a dedicated,
+   active API-scoped subscription for the Blazor server. For the optional UI
+   APIs, keep subscriptions off as described in
+   [Serve the Blazor UI](#serve-the-blazor-ui). No chat-user login is needed.
 3. Generate a separate random backend credential (at least 32 random bytes,
    encoded as 64 hex characters). Store it as the APIM **secret named value**
    `chat-backend-key` and as the Container App secret referenced by
