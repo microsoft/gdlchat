@@ -1,15 +1,14 @@
 # Build, Publish, and Connect a Copilot Studio Agent
 
-This guide records the setup completed in this chat for the Hiring Agent and
-this .NET 10 Blazor service. It uses anonymous access for the POC. The browser
-does not call Copilot Studio directly, and the application does not embed an
-iframe.
+This guide covers how to publish a Copilot Studio agent and connect it to the
+.NET 10 Blazor service. The example uses anonymous access. The browser does not
+call Copilot Studio directly, and the application does not embed an iframe.
 
 ## 1. Prerequisites
 
 - Access to Copilot Studio and the environment where you can create and publish agents.
 - Access to any tools, connectors, or Dataverse tables your agent needs.
-- The .NET 10 SDK in the environment where you run this service. This session used WSL Ubuntu and Bash.
+- The .NET 10 SDK in the environment where you run the service.
 - Outbound HTTPS and secure WebSocket access from the .NET server to Power Platform and Direct Line.
 
 Agent authoring requires your Microsoft account. Anonymous access below applies
@@ -18,17 +17,15 @@ to people chatting with the published agent, not to the maker portal.
 ## 2. Build the Agent
 
 1. Open Copilot Studio and select the intended environment.
-2. Create an agent. This session used the preview authoring experience and an
-   agent named **Hiring Agent**, shown with the Microsoft Copilot harness label
-   in that experience. UI labels can differ between experiences and releases.
+2. Create an agent. UI labels can differ between authoring experiences and
+   releases.
 3. Give the agent a name, description, and instructions. Select an available
    model appropriate for the work; this service does not depend on a particular model.
 4. Describe what the agent should do, what data it can use, and what it should
-   avoid doing. For the Hiring Agent, this included resume intake, matching
-   candidates to job roles, creating job applications, and preparing interviews.
-5. Add the tools and connections required for your scenario. Our agent used
-   Dataverse MCP tools, a resume-intake skill, and a connected Interview Agent.
-   Those are agent capabilities, not requirements of this chat service.
+   avoid doing.
+5. Add the tools and connections required for your scenario. Dataverse MCP
+   tools, skills, and connected agents are examples of agent capabilities, not
+   requirements of this chat service.
 6. Configure each tool's connection and permissions. Anonymous chat does not
    remove authentication requirements on Dataverse or other downstream systems.
    If a tool requires an end-user sign-in, that tool may still prompt or fail;
@@ -47,7 +44,8 @@ capability questions, answer briefly without retrieving or modifying records.
 
 ## 3. Enable Anonymous Chat
 
-These are the settings shown in the preview UI during this session:
+The settings may appear in different locations depending on the authoring
+experience:
 
 1. Open **Agent settings**.
 2. Select **Safety & access**.
@@ -68,15 +66,16 @@ anyone with access to the agent's anonymous channel interact with it.
 ## 4. Identify the Agent
 
 From the agent's publishing options, copy its generated website embed code or
-hosted webchat URL. In this session, the iframe source was:
+hosted webchat URL. Use the URL to identify the environment and agent schema
+name. The following URL illustrates the format:
 
 ```text
 https://copilotstudio.preview.microsoft.com/environments/577b4755-cf12-e3f2-962f-a5528e11fa0c/bots/ppa_hiringagent_yRV7uI/webchat?__version__=2&enableFileAttachment=false&cliAgent=true
 ```
 
-This identifies:
+The URL identifies:
 
-| Field | Value used in this session |
+| Field | Example value |
 | --- | --- |
 | Environment ID | `577b4755-cf12-e3f2-962f-a5528e11fa0c` |
 | Agent schema name | `ppa_hiringagent_yRV7uI` |
@@ -102,7 +101,7 @@ portal navigation or assuming the older SDK endpoint applies:
    individual conversation ID, `/activities`, or the WebSocket stream URL.
 5. Confirm the hosted chat answers a simple message without a Microsoft sign-in prompt.
 
-For this agent, the observed endpoints were:
+For this example agent, the endpoints are:
 
 ```text
 TokenEndpoint:
@@ -125,7 +124,7 @@ API hostname by simply removing hyphens from the environment ID; use the observe
 ## 6. Configure This Service
 
 Update the `CopilotStudioAgent` section in [appsettings.json](appsettings.json).
-The working connection values from this session are:
+The following configuration shows example connection values:
 
 ```json
 {
@@ -200,9 +199,8 @@ is an alternative mode, not a prerequisite for this anonymous connection.
 7. In your local page's browser Network panel, confirm there are no direct requests
    to Power Platform or Direct Line. Those requests belong to the .NET server.
 
-In this session, live C# WebSocket tests returned both capability and follow-up
-answers, including real typing activities. The native Blazor page also returned
-an agent reply, and the typing indicator was observed working.
+The verification steps confirm that the service returns an agent reply, retains
+conversation context, and displays typing activity when the agent sends it.
 
 ## 9. How It Works
 
@@ -295,66 +293,94 @@ state is held in the app process, so a restart starts fresh chats; multi-instanc
 Blazor hosting requires session affinity. Hosting infrastructure is not created
 by this Dockerfile or the registry build command.
 
+## 12. Configure the APIM chat gateway
+
+Replace `<aca-host>` and `<apim-host>` with the hostnames for your Container
+App and APIM instance.
+
+### 1. Import the chat API
+
+In APIM, select **APIs > Add API > OpenAPI** and import
+`apim/chat-api.openapi.json`.
+
+| Field | Value |
+| --- | --- |
+| Name | `chat-api` |
+| API URL suffix | `chat-api` |
+| Subscription required | On |
+| Web service URL | `https://<aca-host>/chat/api/chat` |
+
+Confirm that `POST /messages` appears. Leave `chat-web` and `chatsocket`
+unchanged.
+
+### 2. Create the backend secret
+
+Generate a random 64-character hexadecimal secret with a password or secret
+manager. In APIM, add a secret named value called `chat-backend-key`. In the
+Container App, create a secret with the same name and value. Do not paste the
+secret into documentation or commit it to source control.
+
+### 3. Configure the subscription
+
+In APIM, create an active subscription scoped to the `chat-api` API. Store its
+primary key as a separate Container App secret named
+`chat-apim-subscription-key`. Do not reuse the backend secret.
+
+### 4. Apply the policy
+
+In APIM, open **chat-api > Design > All operations > policy editor** and apply
+`apim/apim-chat-policy.xml`. The policy validates requests and responses,
+limits subscriptions to 30 turns per minute, and rejects requests containing
+`policy-block-test`.
+
+If inherited authentication rejects requests, inspect the effective policy.
+Do not disable authentication globally.
+
+### 5. Configure the Container App
+
+Set these Container App environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `ChatGateway__BackendKey` | Secret reference: `chat-backend-key` |
+| `ChatGateway__SubscriptionKey` | Secret reference: `chat-apim-subscription-key` |
+| `ChatGateway__Endpoint` | `https://<apim-host>/chat-api/messages` |
+| `ChatGateway__Enabled` | `false` initially |
+
+Apply the revision. Keep `useAPIM=true` and use one active backend revision with
+one replica for this proof of concept.
+
+### 6. Test the API policies
+
+In APIM, open **chat-api > Test > POST /messages**. Set
+`Content-Type: application/json` and use the dedicated subscription key in
+`Ocp-Apim-Subscription-Key`.
+
+| Request | Expected result |
+| --- | --- |
+| `{"message":"Hello"}` without a subscription key | 401 |
+| `{"message":"policy-block-test"}` with a key | 403; no backend call |
+| `{"unexpected":"test"}` with a key | 400; schema rejection |
+| `{"message":"Hello. Please briefly introduce yourself."}` with a key | 200; response includes `conversationId` and `messages` |
+
+The portal may add a subscription key automatically. Remove it when testing
+the unauthenticated request. For the blocked request, select **Trace** and
+confirm that APIM does not call the backend. For a normal request, confirm
+that outbound validation runs. Do not share traces that contain credentials.
+
+Reuse the returned `conversationId` in another request to test conversation
+continuity. Additional requests are in `apim/chat-api.http`.
+
+### 7. Enable chat routing
+
+After the policy tests pass, set `ChatGateway__Enabled=true` in the Container
+App and apply the new revision. Refresh the chat page and send a normal message
+to verify the response. A message containing `policy-block-test` should display
+“The chat gateway blocked this request.” Typing indicators are not displayed in
+gateway mode because APIM returns completed replies before the UI displays them.
+
 ## References
 
 - [Copilot Studio user authentication](https://learn.microsoft.com/en-us/microsoft-copilot-studio/configuration-end-user-authentication)
 - [Direct Line WebSocket activities and typing support](https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-direct-line-3-0-receive-activities?view=azure-bot-service-4.0)
 - [Direct Line conversation reconnection](https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-direct-line-3-0-reconnect-to-conversation?view=azure-bot-service-4.0)
-
-
-## Setup
-1. Import Chat API
-In nvmtr2apim → APIs → Add API → OpenAPI, import chat-api.openapi.json.
-
-Field	Value
-Name	chat-api
-API URL suffix	chat-api
-Subscription required	On
-Web service URL	https://sas-chat.bluewater-93a859da.northcentralusstage.azurecontainerapps.io/chat/api/chat
-Confirm POST /messages appears. Leave chat-web and chatsocket unchanged.
-
-2. Create Backend Secret
-Generate a random 64-character hex secret using your password/secret manager.
-
-In APIM → Named values → Add, set both Name and Display name to chat-backend-key, select Secret, and enter that value.
-
-In Container App → Secrets, create chat-backend-key with the same value. Don’t paste it here or commit it.
-
-3. Configure Subscription
-In APIM → Subscriptions → Add, create chat-server, scoped to the new chat-api API. Confirm its state is Active.
-
-Store its primary key as a separate Container App secret named chat-apim-subscription-key. This is not the backend secret.
-
-4. Apply Policy
-Open chat-api → Design → All operations → policy editor (</>).
-
-Apply apim-chat-policy.xml and save. This policy adds validation, a 30-turn/minute subscription limit, and the policy-block-test rejection rule.
-
-If inherited authentication rejects requests, inspect the effective policy. Don’t disable authentication globally.
-
-5. Configure Container
-Under the container’s environment variables, set:
-
-Variable	Value
-ChatGateway__BackendKey	Secret reference: chat-backend-key
-ChatGateway__SubscriptionKey	Secret reference: chat-apim-subscription-key
-ChatGateway__Endpoint	https://nvmtr2apim.azure-api.net/chat-api/messages
-ChatGateway__Enabled	false initially
-Save/apply the revision. Keep useAPIM=true and use one active backend revision with one replica for this POC.
-
-6. Test API Policies
-Use chat-api → Test → POST /messages. Set Content-Type: application/json and use the dedicated subscription key in Ocp-Apim-Subscription-Key.
-
-Request body	Expected
-{"message":"Hello"} without subscription key	401
-{"message":"policy-block-test"} with key	403, no backend call
-{"unexpected":"test"} with key	400, schema rejection
-{"message":"Hello. Please briefly introduce yourself."} with key	200, conversationId and messages
-The portal may automatically insert a subscription key; remove it for the first test. Select Trace for the blocked test and confirm no backend call. For a normal turn, confirm outbound validation runs. Don’t share traces containing credentials.
-
-Reuse the returned conversationId in another request to test continuity. More requests are in chat-api.http.
-
-7. Enable UI Routing
-After those tests pass, change ChatGateway__Enabled=true in ACA and apply the new revision.
-
-Refresh the chat page. A normal message should receive a reply; sending policy-block-test should display “The chat gateway blocked this request.” Typing indicators won’t appear in gateway mode because completed replies must pass APIM before display.
