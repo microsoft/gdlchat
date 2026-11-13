@@ -21,10 +21,11 @@ resources and image version:
 
 ```bash
 # Azure CLI deployment settings
-export ACRGROUP="gdlchat-rg"
+export APPGROUP="gdlchat-app-rg"
 export APP="gdlchat"
 
 # Container image
+export ACRGROUP="gdlchat-rg"
 export ACR="gdlchatacr1234"
 export VERSION="v1"
 ```
@@ -32,7 +33,8 @@ export VERSION="v1"
 ## Create the Container App
 
 Follow the [Azure portal quickstart](https://learn.microsoft.com/en-us/azure/container-apps/quickstart-portal)
-to create the Container App. Use the resource group and app name set above.
+to create the Container App. Use `APPGROUP` for the resource group and `APP` for
+the app name.
 Create or select a Container Apps environment in the portal.
 
 On the **Container** tab, select **Azure Container Registry** as the image source
@@ -55,30 +57,51 @@ replica.
 
 ## Set environment variables
 
-The container image includes the settings from `appsettings.json`. After creating
-the Container App, you can override these settings for this deployment with
-environment variables. Settings in `appsettings.json` are hierarchical, while
-environment variables are flat name-value pairs. Use `__` to represent each level
+The container image includes the settings from `appsettings.json` and is embedded 
+into the running application.  If you need to override specific settings, you can 
+define them as environment variables. Settings in `appsettings.json` are hierarchical, 
+while environment variables are flat name-value pairs. Use `__` to represent each level
 of nesting: for example, `ChatGateway.Enabled` in JSON settings maps to
-`ChatGateway__Enabled` as the environment variable name. Run the following command
-to set the deployment overrides:
+`ChatGateway__Enabled` as the environment variable name.
+
+To update specific settings, use the following command, replacing the example
+names and values with the settings you want to override:
 
 ```bash
 az containerapp update \
   --name "$APP" \
-  --resource-group "$ACRGROUP" \
+  --resource-group "$APPGROUP" \
   --set-env-vars \
-    ASPNETCORE_ENVIRONMENT=Production \
-    ASPNETCORE_HTTP_PORTS=8080 \
-    useAPIM=true \
-    ChatGateway__Enabled=false
+    Setting_1_Name=value \
+    Section__Setting_2_Name=value
 ```
 
-The `useAPIM` setting controls the interface path: `true` uses `/chat/`, and
-`false` uses `/`. Chat messages connect directly to the agent until you enable
-Azure API Management (APIM) routing below.
-
 ## Configure APIM message routing
+
+As deployed, the chat application connects directly to the **Microsoft Copilot
+Studio agent**. To enable routing through APIM, we will configure the APIM
+endpoint, secure calls to APIM with a subscription key, and secure calls from
+APIM to the chat backend with a shared key stored as an APIM secret named value
+and a Container App secret.
+
+### Routing
+
+### Secure
+
+### Named Value
+
+### ACA Secret
+
+
+
+
+- **chat-backend-key:** Allows the APIM to securely call the client.
+- **chat-apim-subscription-key:** Allows the client to call the APIM.
+
+
+- **and so we will need to tell the chat application 2 things
+
+(APIM) routing.
 
 1. Follow the [Azure API Management guide](azure-api-management.md) to create
    the chat API, configure its credentials, and test its policies.
@@ -98,7 +121,7 @@ export CHAT_GATEWAY_ENDPOINT="https://<apim-host>/chat-api/messages"
 
 az containerapp update \
   --name "$APP" \
-  --resource-group "$ACRGROUP" \
+  --resource-group "$APPGROUP" \
   --set-env-vars \
     useAPIM=true \
     ChatGateway__Enabled=true \
@@ -118,10 +141,13 @@ Run this command to get the app's hostname:
 ```bash
 az containerapp show \
   --name "$APP" \
-  --resource-group "$ACRGROUP" \
+  --resource-group "$APPGROUP" \
   --query properties.configuration.ingress.fqdn \
   --output tsv
 ```
+
+The `useAPIM` setting controls the interface path: `true` uses `/chat/`, and
+`false` uses `/`.
 
 Open `https://<app-host>/chat/`, replacing `<app-host>` with the returned hostname.
 If you set `useAPIM=false`, open `https://<app-host>/` instead. Send a message
@@ -137,6 +163,6 @@ To publish an update:
 ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)
 az containerapp update \
   --name "$APP" \
-  --resource-group "$ACRGROUP" \
+  --resource-group "$APPGROUP" \
   --image "$ACR_LOGIN_SERVER/copilot-chat:$VERSION"
 ```
