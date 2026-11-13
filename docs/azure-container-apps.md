@@ -1,24 +1,27 @@
 # Azure Container Apps
 
-This guide deploys the Copilot Studio Chat image to Azure Container Apps. First
-create the registry and push an image using
-[Azure Container Registry](azure-container-registry.md).
+Deploy your chat service image to Azure Container Apps, configure chat routing,
+and publish updates.
 
-The examples use a user-assigned managed identity for image pulls, one replica
-for the in-memory conversation backend, and external HTTPS ingress. Restrict
-network access or add access controls before exposing this anonymous app
-publicly.
+This setup uses a managed identity to pull the image from Azure Container
+Registry (ACR), a single replica to keep conversation state in memory, and
+HTTPS ingress.
+
+> [!IMPORTANT]
+> The chat allows anonymous access. Restrict network access or add access
+> controls before making it available publicly.
 
 ## Prerequisites
 
-Follow Microsoft's [Azure Container Apps CLI tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-deploy-first-app-cli)
-for Azure CLI setup and environment provisioning. For private image
-authentication, use the [managed identity image-pull guide](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
-Create a user-assigned identity, grant it the `AcrPull` role on this project's
-registry, and use that identity for the registry pull.
+- Install Azure CLI, sign in, and create a Container Apps environment. Follow
+  the [Container Apps CLI tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-deploy-first-app-cli).
+- Build and publish your image to ACR. Follow the
+  [Azure Container Registry guide](azure-container-registry.md).
+- Create a user-assigned managed identity and give it the `AcrPull` role on
+  your registry. Follow the
+  [managed identity image-pull guide](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
 
-Ensure the image is available in ACR. These values must match the registry
-deployment:
+Set the following values to match your Azure resources and image version:
 
 ```bash
 export SUBSCRIPTION_ID="<subscription-id>"
@@ -33,10 +36,8 @@ export VERSION="v1"
 
 ## Create the Container App
 
-After creating the environment and assigning `AcrPull`, deploy the image with
-the identity configured for registry access. The app listens on port `8080`.
-`useAPIM=true` configures the app to serve its UI under `/chat/`; it does not
-enable APIM message routing.
+From your shell, run the following command to deploy the image. The app listens
+on port `8080` and serves the interface at `/chat/`.
 
 ```bash
 ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)
@@ -62,21 +63,27 @@ az containerapp create \
     ChatGateway__Enabled=false
 ```
 
-Use `useAPIM=false` to serve the UI at `/` instead. Keep one replica with the
-current in-memory conversation backend; restarts and new revisions lose
-conversation state.
+The `useAPIM` setting controls the interface path: `true` uses `/chat/`, and
+`false` uses `/`. Chat messages connect directly to the agent until you enable
+Azure API Management (APIM) routing below.
+
+Keep one replica for the in-memory conversation backend. Restarting the app
+or deploying a new revision resets conversation state.
 
 ## Configure APIM message routing
 
-If the chat API and its policies are configured, follow Microsoft's
-[Container Apps secrets guide](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
-to create these secrets in the Container App's **Secrets** page:
+1. Follow the [Azure API Management guide](azure-api-management.md) to create
+   the chat API, configure its credentials, and test its policies.
+2. In your Container App, open **Secrets** and create the following entries.
+   See [Manage secrets in Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
+   for instructions.
 
-- `chat-backend-key`: the same backend credential used by APIM's named value.
-- `chat-apim-subscription-key`: a separate, API-scoped APIM subscription key.
+   - `chat-backend-key`: the same backend credential stored in APIM's named value.
+   - `chat-apim-subscription-key`: a separate subscription key scoped to the chat API.
 
-Do not put secret values in shell history, image build arguments, or source
-control. Set the environment variables using secret references:
+3. Replace `<apim-host>` below with your APIM hostname, then run the command to
+   enable routing. Keep secret values out of shell history, build arguments,
+   and source control; use the secret references shown here.
 
 ```bash
 export CHAT_GATEWAY_ENDPOINT="https://<apim-host>/chat-api/messages"
@@ -92,13 +99,13 @@ az containerapp update \
     ChatGateway__SubscriptionKey=secretref:chat-apim-subscription-key
 ```
 
-Replace `<apim-host>` with the APIM gateway hostname. Keep
-`ChatGateway__Enabled=false` until the API and policies are ready. See
-[Azure API Management](azure-api-management.md) for APIM configuration.
+Keep `ChatGateway__Enabled=false` until the API and policy tests pass.
+For other configuration changes, see
+[Application settings](appsettings.md#update-azure-container-apps).
 
 ## Verify and update the deployment
 
-Get the app hostname:
+Run this command to get the app's hostname:
 
 ```bash
 az containerapp show \
@@ -108,9 +115,15 @@ az containerapp show \
   --output tsv
 ```
 
-Open the hostname with `/chat/` when `useAPIM=true`, or `/` when it is false.
-For a new image version, follow the
-[ACR build and push steps](azure-container-registry.md), then update the app:
+Open `https://<app-host>/chat/`, replacing `<app-host>` with the returned hostname.
+If you set `useAPIM=false`, open `https://<app-host>/` instead. Send a message
+to check the agent connection.
+
+To publish an update:
+
+1. Set `VERSION` to a new image tag and follow the
+   [ACR build and push steps](azure-container-registry.md#build-and-push-the-image).
+2. Update the app to use that image:
 
 ```bash
 ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)

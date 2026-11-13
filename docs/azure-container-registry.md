@@ -1,19 +1,22 @@
 # Azure Container Registry
 
-This guide creates an Azure Container Registry (ACR) and builds and pushes the
-Copilot Studio Chat image. For deployment to Azure Container Apps, see
-[Azure Container Apps](azure-container-apps.md).
+Create an Azure Container Registry (ACR) to store your chat service image,
+then build and publish the image from your computer.
+
+## Before you begin
+
+- Install Azure CLI and sign in to your Azure subscription.
+- Install and start Docker.
+- Make sure your Azure account can create a registry and push images to it.
 
 ## Create the registry
 
-For Azure CLI installation and registry provisioning, follow Microsoft's
-[ACR CLI quickstart](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-get-started-azure-cli).
-Use a globally unique registry name containing only letters and numbers.
-This project uses the Basic SKU. Docker must be installed and running to build
-the image locally.
+Follow the [ACR CLI quickstart](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-get-started-azure-cli)
+to create a registry. Choose the **Basic** pricing tier and a globally unique
+name that contains only letters and numbers.
 
-Use these values for this deployment and in the
-[Container Apps guide](azure-container-apps.md):
+In your shell, set the following values to match your subscription and registry.
+The [Container Apps guide](azure-container-apps.md) uses the same values.
 
 ```bash
 export SUBSCRIPTION_ID="<subscription-id>"
@@ -25,23 +28,24 @@ export VERSION="v1"
 
 ## Build and push the image
 
-From the repository root, run:
+From the repository root, run [build.sh](../build.sh):
 
 ```bash
 ACR="$ACR" ACRGROUP="$ACRGROUP" VERSION="$VERSION" bash ./build.sh
 ```
 
-The script signs in to ACR, builds the `copilot-chat:$VERSION` image, and pushes
-it to the registry. It requires the registry and resource group to exist. The
-script uses `latest` if `VERSION` is not set; prefer a new version tag for each
-release.
+The script signs in to your registry, builds the image with Docker, and pushes
+it as `<registry-login-server>/copilot-chat:v1`.
 
-For a later release, set a new tag and run the script again:
+Use a new version tag for each release. If you omit `VERSION`, the script uses
+`latest`. To publish an update, change the version and run the script again:
 
 ```bash
 export VERSION="v2"
 ACR="$ACR" ACRGROUP="$ACRGROUP" VERSION="$VERSION" bash ./build.sh
 ```
 
-Continue with [Azure Container Apps](azure-container-apps.md) to deploy the
-image.
+## Next step
+
+Follow the [Azure Container Apps guide](azure-container-apps.md) to deploy
+your image.
