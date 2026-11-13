@@ -1,62 +1,58 @@
 # Azure API Management
 
-Azure API Management (APIM) can serve the Blazor UI and route chat messages
-through policies. Serving the UI and routing messages are separate
-configurations; you can enable either or both. For the Azure Container Apps
-(ACA) ingress and environment variables, see
-[Azure Container Apps](azure-container-apps.md).
+Use Azure API Management (APIM) to serve the chat interface and apply policies
+to chat messages. 
 
-If you do not already have an APIM instance, follow Microsoft's
-[APIM instance quickstart](https://learn.microsoft.com/en-us/azure/api-management/get-started-create-service-instance).
+## Before you begin
+
+- Create an APIM instance that supports WebSocket APIs. Follow the
+  [APIM quickstart](https://learn.microsoft.com/en-us/azure/api-management/get-started-create-service-instance).
+  The Consumption tier does not support WebSocket APIs.
+- Deploy the chat service to Azure Container Apps (ACA). Follow the
+  [Container Apps guide](azure-container-apps.md).
+- Make sure APIM can reach the app's ingress over HTTPS and WSS on port 443.
 
 ## Serve the Blazor UI
 
-The `useAPIM` setting selects the app's UI base path. Set it to `true` to serve
-the app at `/chat/`; set it to `false` to use `/`. This setting does not enable
-APIM message routing.
+Set `useAPIM=true` in the Container App to serve the interface at `/chat/`.
 
-Configure these APIs in APIM, replacing `<aca-host>` with the Container App
-hostname:
+Create the following APIs in APIM. Replace `<aca-host>` with your Container
+App's hostname:
 
 | API | API URL suffix | Backend URL |
 | --- | --- | --- |
 | HTTP | `chat` | `https://<aca-host>/chat` |
 | WebSocket | `chat/_blazor` | `wss://<aca-host>/chat/_blazor` |
 
-The HTTP API needs root `/` and wildcard `/*` operations for `GET`, `POST`, and
-`DELETE` to pass pages, static assets, and Blazor initialization requests. The
-WebSocket API uses its automatic `onHandshake` operation. See Microsoft's
-[WebSocket API guide](https://learn.microsoft.com/en-us/azure/api-management/websocket-api).
-Preserve query
-strings and cookies; do not strip the backend `/chat` prefix. For anonymous UI
-access, turn **Subscription required** off on both APIs. The APIM tier must
-support WebSocket APIs; Consumption does not.
+For the HTTP API, add root `/` and wildcard `/*` operations for `GET`, `POST`,
+and `DELETE`. These pass through pages, static assets, and Blazor startup
+requests. The WebSocket API uses the automatically created `onHandshake`
+operation. See [WebSocket APIs in APIM](https://learn.microsoft.com/en-us/azure/api-management/websocket-api).
 
-Keep ACA HTTP ingress on transport Auto with target port `8080`. APIM connects
-to ACA on HTTPS/WSS port 443, so it must have network access to the ingress.
-Open `https://<apim-host>/chat/`, including the trailing slash. Check for HTTP
-200 on the Blazor boot script and a 101 upgrade on `/chat/_blazor`. With
-`useAPIM=true`, direct ACA access at `https://<aca-host>/chat/` uses the same UI
-endpoint. If APIM previously used the `chat/socket` WebSocket API suffix, update
-it to `chat/_blazor`.
+Keep query strings, cookies, and the backend `/chat` prefix intact. Turn
+**Subscription required** off for both interface APIs to allow anonymous access.
+In ACA, set the ingress transport to **Auto** and the target port to `8080`.
 
-The current chat-turn backend stores state in memory and requires one replica.
-Blazor session affinity alone does not provide affinity for the separate
-server-to-APIM HTTP chat requests.
+Open `https://<apim-host>/chat/`, including the trailing slash. In your browser's
+developer tools, check that the Blazor boot script returns HTTP 200 and
+`/chat/_blazor` upgrades to a WebSocket with HTTP 101.
+
+If you previously used `chat/socket` as the WebSocket API suffix, change it to
+`chat/_blazor`.
+
+Keep one backend replica. The chat-turn backend stores conversations in memory;
+Blazor session affinity does not cover the separate HTTP requests through APIM.
 
 ## Route chat messages through policies
 
-`ChatGateway:Enabled` selects message routing and is independent of `useAPIM`.
-When enabled, each prompt and complete reply pass through APIM as JSON. The
-browser still uses Blazor WebSockets for the UI; agent tokens, subscription
-keys, and backend credentials are not sent to the browser. The backend uses
-the local agent transport rather than calling APIM recursively.
+Each prompt and complete reply passes through APIM as JSON. The browser uses
+Blazor WebSockets for the interface.
+Agent tokens, subscription keys, and backend credentials stay on the server.
+The backend connects directly to the agent.
 
-There is no fallback to the agent when the gateway is unconfigured, rejects a
-request, or fails. Keep the gateway disabled until its API and credentials are
-configured. The app's current `appsettings.json` has
-`ChatGateway.Enabled=false`; set it to `true` in the Container App only after
-the policy setup and tests are complete.
+Keep `ChatGateway:Enabled=false` until you configure and test the API. Once
+enabled, gateway errors are shown to the user. The app does not bypass APIM
+if a request fails or is rejected.
 
 The message path is:
 
@@ -69,93 +65,119 @@ Blazor server -> APIM POST /chat-api/messages
 
 ### Configure the chat API
 
-1. Import [the OpenAPI definition](../apim/chat-api.openapi.json) as a **new
-   OpenAPI API** for chat message routing. Use API URL suffix `chat-api` and
+1. Import the [OpenAPI definition](../apim/chat-api.openapi.json) as a new
+   OpenAPI API. Use API URL suffix `chat-api` and
    backend URL `https://<aca-host>/chat/api/chat`. The import creates
-   `POST /messages` and its request/response schemas. This is separate from the
-   UI routing described in [Serve the Blazor UI](#serve-the-blazor-ui).
-   For the APIM import workflow, see Microsoft's
+   `POST /messages` and its request and response schemas. See the
    [OpenAPI import guide](https://learn.microsoft.com/en-us/azure/api-management/import-api-from-oas).
-2. Leave **Subscription required** on for `chat-api`. Create a dedicated,
-   active API-scoped subscription for the Blazor server. For the UI
-   APIs, keep subscriptions off as described in
-   [Serve the Blazor UI](#serve-the-blazor-ui). No chat-user login is needed.
+2. Leave **Subscription required** on for `chat-api`. Create an active
+   subscription scoped to this API for the Blazor server. Chat users do not
+   need subscriptions or a sign-in.
 3. Generate a separate random backend credential (at least 32 random bytes,
    encoded as 64 hex characters). Store it as the APIM **secret named value**
    `chat-backend-key` and as the Container App secret referenced by
-   `ChatGateway__BackendKey`. Do not reuse the subscription key. The backend
-   accepts secrets of 32 to 256 characters and rejects requests without the
-   correct `X-Chat-Backend-Key` before reading the message.
+   `ChatGateway__BackendKey`. Keep this credential separate from the subscription
+   key. The backend accepts secrets of 32 to 256 characters and checks
+   `X-Chat-Backend-Key` before reading the message.
 4. Apply [the chat policy](../apim/apim-chat-policy.xml) at the **chat-api API
-   scope**. It preserves inherited policies, requires a valid application
+   scope**. The policy preserves inherited policies, requires a valid application
    subscription, limits that subscription to 30 turns per minute, validates
    input and output JSON, rejects prompts containing `policy-block-test`, and
-   overwrites the backend credential header. The text rule is a test control,
-   not a safety classifier.
-5. Inspect effective inherited policies for this API. Existing global
-   authentication can still reject the call; scope any approved exception to
-   this API rather than disabling authentication across the APIM service.
-   Ensure the effective backend forward-request timeout allows the 85-second
-   agent operation plus network and policy overhead; avoid automatic POST
-   retries.
+   sets the backend credential header. The text rule tests policy enforcement;
+   it is not a safety classifier.
+5. Review the API's effective policies, including inherited authentication.
+   Scope any approved authentication exception to this API. Set the backend
+   `forward-request` timeout to allow the 85-second agent operation plus
+   network and policy overhead. Keep automatic POST retries disabled.
 6. Configure `ChatGateway__Endpoint` as
    `https://<apim-host>/chat-api/messages`. Set `ChatGateway__SubscriptionKey`
    and `ChatGateway__BackendKey` to Container App secret references. See
    [Container App configuration](azure-container-apps.md#configure-apim-message-routing).
 
-[appsettings.json](../appsettings.json) doesn't contain these secrets. Rotate
-the two credentials independently. For `useAPIM=false`, the backend URL loses its
-`/chat` prefix, so update the APIM backend URL to match. A local UI still calls the
-configured APIM endpoint.
+Store credentials as secrets rather than in
+[appsettings.json](../appsettings.json), and rotate them independently.
 
 ### Test the policies
 
-[The request collection](../apim/chat-api.http) contains manual requests for
-authentication, blocking, JSON validation, a two-turn conversation, expiration,
-and direct backend denial. It reads the subscription key from the REST client's
-process environment; never commit credential values to this file.
+In APIM, open **chat-api > Test > POST /messages**. Set
+`Content-Type: application/json` and supply the dedicated subscription key in
+`Ocp-Apim-Subscription-Key`.
 
-1. Confirm a request without a subscription returns 401.
-2. Confirm `policy-block-test` returns 403 and an APIM trace shows no backend
-   call.
-3. Confirm an invalid request returns 400 from content validation.
-4. Send a normal message, then reuse the returned `conversationId` for a
-   follow-up. Both must appear as separate APIM operations with structured
-   request and response bodies. Confirm the response passes outbound validation.
-5. Confirm direct backend POST without `X-Chat-Backend-Key` returns 401 after
-   the backend secret is configured (503 while it is missing), with no agent
-   call.
+| Request | Expected result |
+| --- | --- |
+| `{"message":"Hello"}` without a subscription key | 401 |
+| `{"message":"policy-block-test"}` with a key | 403; no backend call |
+| `{"unexpected":"test"}` with a key | 400; schema rejection |
+| `{"message":"Hello. Please briefly introduce yourself."}` with a key | 200; response includes `conversationId` and `messages` |
 
-For content controls, add `choose`/`return-response` or call an inspection
-service using `send-request` in inbound or outbound policies. Request-side
-blocking happens before the agent runs; response-side blocking cannot undo
-agent tool actions or remove a turn already recorded by Copilot Studio. The app
-does not automatically retry failed POSTs. Clear the conversation after an
-uncertain or expired turn.
+The portal may add a subscription key automatically. Remove it when testing a
+request without a key. Use **Trace** to check policy execution. Keep traces
+that contain credentials private.
+
+Use the [request collection](../apim/chat-api.http) for additional tests. It
+reads the subscription key from your REST client's process environment. Keep
+credential values out of the file.
+
+Check that:
+
+- A blocked request makes no backend call.
+- A normal message and a follow-up using its `conversationId` appear as
+  separate APIM operations. Both responses pass outbound validation.
+- A direct backend request without `X-Chat-Backend-Key` returns 401 after the
+  backend secret is configured, or 503 while it is missing. Neither request
+  calls the agent.
+
+To add content controls, use `choose` and `return-response`, or call an
+inspection service with `send-request` in inbound or outbound policies.
+Blocking a request stops it before the agent runs. Blocking a response cannot
+undo tool actions or remove a turn already recorded by Copilot Studio.
+
+The app does not automatically retry failed POST requests. Clear the
+conversation if a turn expires or you are unsure whether it completed.
+
+### Enable chat routing
+
+1. After the policy tests pass, set `ChatGateway__Enabled=true` in the Container
+   App and deploy the revision. Keep one active backend revision with one replica.
+2. Open `https://<apim-host>/chat/` and send a message to check the connection.
+3. Send a message containing `policy-block-test`. The interface should show
+   "The chat gateway blocked this request."
+
+The interface shows **Waiting for agent...** until the complete reply returns.
+Typing activities and partial replies are not forwarded through the gateway.
 
 ## Proof-of-concept limits
 
-The backend holds at most 256 conversations, expires them after 30 idle minutes,
-and rejects overlapping turns for the same handle with 409. It returns 410 for
-an expired or unknown handle and 503 at capacity. Clearing a conversation
-forgets the UI's handle; the old backend state expires rather than being
-deleted immediately. Restarts and new revisions lose backend conversation
-state, so existing chats need to be cleared.
+The sample backend stores conversation state in memory:
 
-Completed replies are limited to 128 messages and 32,000 total text characters.
-The backend timeout is 85 seconds; the UI still has a 90-second overall timeout.
-Extra moderation calls count against that overall budget.
+- Up to 256 conversations, each expiring after 30 idle minutes.
+- One active turn per conversation. Overlapping requests return HTTP 409.
+- HTTP 410 for expired or unknown conversation handles.
+- HTTP 503 when conversation capacity is reached.
+- Up to 128 messages and 32,000 total text characters per completed reply.
 
-Conversation handles are sensitive capabilities, not authenticated user
-identities. The sample rate limit applies to the server's subscription, not to
-individual anonymous visitors. Do not log either credential, Direct Line
-tokens, or unredacted resumes or candidate details. APIM diagnostics have
-body-size and sampling limits and are not a complete transcript store. Any
-audit pipeline needs explicit redaction, retention, access controls, and
-correlation by conversation and turn.
+Clearing a conversation removes its handle from the interface. The old backend
+state expires later. Restarts and new revisions reset backend state; clear
+existing chats afterward.
 
-References: [APIM WebSockets](https://learn.microsoft.com/en-us/azure/api-management/websocket-api),
-[Blazor app base paths](https://learn.microsoft.com/en-us/aspnet/core/blazor/host-and-deploy/app-base-path?view=aspnetcore-10.0),
-[Content validation](https://learn.microsoft.com/en-us/azure/api-management/validate-content-policy),
-[rate limiting](https://learn.microsoft.com/en-us/azure/api-management/rate-limit-by-key-policy),
-and [external policy calls](https://learn.microsoft.com/en-us/azure/api-management/send-request-policy).
+The backend timeout is 85 seconds. The interface allows 90 seconds for the
+entire request, including moderation calls and policy execution.
+
+### Protect conversation data
+
+Treat conversation handles as sensitive: they grant access to conversations,
+but do not identify authenticated users. Rate limits apply to the server's
+subscription, not to individual visitors.
+
+Keep credentials, Direct Line tokens, and unredacted personal data out of logs.
+APIM diagnostics limit body size and sample requests, so they are not a complete
+conversation record. If you need an audit trail, define redaction, retention,
+and access controls, and correlate records by conversation and turn.
+
+## References
+
+- [APIM WebSockets](https://learn.microsoft.com/en-us/azure/api-management/websocket-api)
+- [Blazor app base paths](https://learn.microsoft.com/en-us/aspnet/core/blazor/host-and-deploy/app-base-path?view=aspnetcore-10.0)
+- [Content validation](https://learn.microsoft.com/en-us/azure/api-management/validate-content-policy)
+- [Rate limiting](https://learn.microsoft.com/en-us/azure/api-management/rate-limit-by-key-policy)
+- [External policy calls](https://learn.microsoft.com/en-us/azure/api-management/send-request-policy)

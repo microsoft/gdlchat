@@ -47,7 +47,7 @@ and the [policy reference](https://learn.microsoft.com/en-us/azure/api-managemen
 
 Before you start, you need:
 
-- The .NET 10 SDK ([details](publish.md#prerequisites)).
+- The .NET 10 SDK ([details](development.md#prerequisites)).
 - An Azure subscription with permission to deploy resources.
 - An Azure Container Registry ([setup guide](docs/azure-container-registry.md)).
 - An Azure Container Apps environment ([setup guide](docs/azure-container-apps.md)).
@@ -58,171 +58,69 @@ Configure each component in the order below.
 
 ### Copilot Studio agent
 
-The chat client needs to communicate with the agent through Direct Line. After setup, the
-server has two values for that:
+The copilot agent has extensive capabilities ( not covered in this guide ). Once it has 
+been configured, we will need its direct line endpoint and a token URL so that the chat 
+client can communicate with the agent:
 
-- **Anonymous token URL:** the server uses it to get a token for the agent's Direct Line
-  channel. The token authorizes the server's requests without an Entra sign-in.
-- **Regional Direct Line API URL:** the endpoint the chat client uses to communicate with the
-  agent. The server starts conversations, sends messages, and reads replies through it.
+- **Anonymous token URL:** Needed to obtain a token that authorizes communication with 
+the agent's Direct Line channel.
+- **Regional Direct Line API URL:** Needed to connect the server to the agent
+  through Direct Line to start conversations, send messages, and receive replies.
 
-To get these values, see [Copilot Studio setup](docs/copilot-studio-setup.md). You'll add
-them to the application settings later in these steps.
+Follow the [Copilot Studio setup guide](docs/copilot-studio-setup.md) to configure
+the agent and get these URLs. You'll add them to the application settings later.
 
 ### Azure API Management
 
-Configure APIM using the [APIM setup guide](docs/azure-api-management.md). Set `useAPIM`
-to `true`, and configure `ChatGateway:Endpoint` and the gateway credentials. Keep
-`ChatGateway:Enabled` set to `false` until the policy tests pass.
+This setup uses APIM to expose the chat interface to users and apply configurable
+policies to each conversation turn.
 
-The backend key is a random secret that you generate during setup, separate from the
-APIM subscription key. Store the same value in two places: the APIM secret named value
-`chat-backend-key`, which the chat policy sends to the server, and the server's
-`ChatGateway:BackendKey` setting. The server rejects requests that don't carry it.
+- **Passthrough API:** Routes browser requests to the Blazor chat server.
+- **WebSocket API:** Relays the SignalR WebSocket connection between the browser
+  and the Blazor server.
+- **Turns API:** Applies governance policies to each conversation turn through
+  an endpoint called by the chat server.
+- **Shared Key:** This key ensures that only the APIM is allowed to communicate with the chat server.
+ 
+Follow the [APIM setup guide](docs/azure-api-management.md) to configure these APIs
+and the shared key in your existing APIM instance.
 
 ### Azure Container Registry and Container Apps
 
-Create or reuse a container registry and a Container Apps environment in the same
-subscription. See the [Container Registry guide](docs/azure-container-registry.md) and the
-[Container Apps guide](docs/azure-container-apps.md).
+The **Azure Container Registry** stores the chat server's container image and the **Azure Container
+Apps** runs that image with the chat settings.
 
-### Local app
+Create or reuse a registry and a Container Apps environment in the same
+subscription. Follow the [Container Registry guide](docs/azure-container-registry.md)
+to build and push the image, then the [Container Apps guide](docs/azure-container-apps.md)
+to deploy it and configure the chat settings.
 
-1. From the repository root, restore dependencies:
+### Local development
 
-   ```bash
-   dotnet restore
-   ```
+For local setup, connection verification, runtime behavior, and optional SDK
+authentication, see [Build, Run, and Deploy the Chat Service](development.md).
 
-   See [Build and Run](publish.md#build-and-run) for the full setup.
+## Using the chat interface
 
-2. Start the app:
+> [!NOTE]
+> The chat UI is built with Blazor and can be customized to suit your needs.
 
-   ```bash
-   ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --urls http://localhost:5188
-   ```
+1. Open your configured APIM URL at `https://<apim-host>/chat/`.
+2. Enter a message in **Type a message...**, then press **Enter** or select the
+   send button.
+3. Wait for the agent's reply. Your messages appear as **You**, and replies
+   appear as **Agent**.
+4. Send follow-up questions to continue the conversation. Select **Clear
+   conversation** to start a new one.
 
-   See [Build and Run](publish.md#build-and-run) for alternative run options.
+While a reply is pending, the page shows **Waiting for agent...** and disables
+the message input. If a request fails, an error message appears above the input.
 
-3. Open your configured APIM URL at `https://<apim-host>/chat/` and follow the
-   [connection verification](publish.md#verify-the-connection) steps if needed.
+![Chat interface showing the conversation and message input](docs/images/chatUI.png)
 
+## Security
 
-## Direct Line behavior
-
-The server's default `CopilotStudioAgent:ConnectionMode` is `DirectLine`. It
-obtains an anonymous conversation token from `CopilotStudioAgent:TokenEndpoint`
-and communicates with `CopilotStudioAgent:DirectLineEndpoint`. This mode does
-not request an Entra token, launch a browser, or require a Direct Line secret in
-the app.
-
-Each chat has separate conversation state and a server-held token. Clearing the
-conversation starts a new one; unused backend state expires automatically. The
-client reconnects subsequent turns using the previous watermark, excludes user
-echoes, and refreshes conversation tokens before expiry when possible.
-
-The text-only chat finishes a reply on an accepting-input or end-of-turn activity,
-or after three quiet seconds following bot text. Typing events extend the wait.
-Long pauses between bot messages can leave later messages for the next request.
-The page cancels a request after 90 seconds.
-
-When the gateway is enabled, each prompt and complete reply passes through APIM as
-JSON. The UI shows "Waiting for agent" until the full response returns. Typing
-events and partial replies don't cross this HTTP boundary, so the response isn't
-streamed.
-
-There is no repeated HTTP polling for replies. Token acquisition, conversation
-creation or reconnection, and message submission still use HTTPS. Development
-configuration suppresses routine Direct Line HTTP request logs while retaining
-warnings and errors; set
-`Logging:LogLevel:System.Net.Http.HttpClient.direct-line` to `Information` to
-restore them.
-
-## Connection
-
-The existing server-side SDK mode remains available by setting
-`CopilotStudioAgent:ConnectionMode` to `Sdk`. The authentication and timeout
-instructions below apply only to that mode.
-
-Set `CopilotStudioAgent:EnvironmentId` and `CopilotStudioAgent:SchemaName` in
-appsettings.json, or use `CopilotStudioAgent__EnvironmentId` and
-`CopilotStudioAgent__SchemaName` environment variables.
-
-By default, authentication uses `Azure.Identity.DefaultAzureCredential`. It can use an
-existing developer identity or a managed identity without storing a secret.
-Interactive browser authentication is disabled in this mode.
-
-To use a service principal, set these variables in the server's environment
-before starting the app:
-
-- `AZURE_TENANT_ID`: the Microsoft Entra tenant ID.
-- `AZURE_CLIENT_ID`: the application/client ID.
-- `AZURE_CLIENT_SECRET`: the client secret value, provided through your secret manager.
-
-Do not store secrets in appsettings.json or commit them to source control.
-The `TenantId` and `AppClientId` settings in `CopilotStudioAgent` are used only by
-the developer sign-in mode below, not by DefaultAzureCredential; use the standard
-Azure environment variables above for application credentials.
-Restart the server after changing environment variables.
-
-The identity must be authorized to invoke the agent. Application credentials
-require a Copilot Studio agent and endpoint that support application permissions;
-they do not grant access by themselves. A delegated-only agent requires an
-authorized user credential rather than a client secret. The SDK determines the
-Power Platform token scope from its connection settings.
-
-## Developer Sign-In
-
-To use delegated permissions with your own app registration, set
-`CopilotStudioAgent:AuthenticationMode` to `InteractiveBrowser`. This mode is
-allowed only when `ASPNETCORE_ENVIRONMENT=Development`.
-
-Configure a single-tenant Microsoft Entra app registration in the agent's tenant:
-
-1. Under Authentication, add the Mobile and desktop applications platform with
-	redirect URI `http://localhost`.
-2. Under API permissions, add Power Platform API delegated permission
-	`CopilotStudio.Copilots.Invoke` and obtain consent as required by your tenant.
-3. Set `CopilotStudioAgent:TenantId` and `CopilotStudioAgent:AppClientId` to the
-	tenant ID and your registration's Application (client) ID. Do not use the
-	Azure CLI client ID or supply a client secret for this mode.
-
-For example, from WSL Bash:
-
-```bash
-export CopilotStudioAgent__AuthenticationMode=InteractiveBrowser
-export CopilotStudioAgent__TenantId=e0609078-8b1f-4b6b-a7dc-5928feee8194
-export CopilotStudioAgent__AppClientId='<your-app-registration-client-id>'
-ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --urls http://localhost:5188
-```
-
-The first chat request opens the developer's browser for sign-in. The chat page
-itself has no login screen; all visitors use the signed-in developer's identity.
-Run the server locally with browser access to its localhost callback. In WSL,
-the Windows browser must be able to reach the WSL localhost listener, and browser
-launching must be configured. Sign-in must finish within the chat's 90-second
-request timeout; retry the message if it times out.
-
-The singleton credential caches tokens in memory for the server process; a server
-restart may require sign-in again. `AZURE_TOKEN_CREDENTIALS` and the service
-principal environment variables do not select the identity in this mode. Azure
-CLI login cannot request this permission because its Microsoft-owned client
-requires API-owner preauthorization (`AADSTS65002`).
-
-Keep this developer mode local and trusted. For production, return to `Default`
-and configure an authorized application or managed identity on a supported agent
-endpoint. A client secret cannot provide delegated user permissions.
-
-## Azure deployment
-
-Use the service guides below to create and deploy the Azure resources:
-
-1. [Azure Container Registry](docs/azure-container-registry.md): create a registry and build and push the image with `build.sh`.
-2. [Azure Container Apps](docs/azure-container-apps.md): configure registry access, deploy the image, and set application configuration.
-3. [Azure API Management](docs/azure-api-management.md): host the UI and route chat messages through APIM policies.
-
-Agent text is rendered as plain text, not executable HTML. Request errors are
-shown without exposing credentials; detailed errors are logged on the server.
 Since the page is anonymous, keep this demo on a trusted network; add access
 controls and usage limits before exposing it publicly with a shared application
 identity.
+
