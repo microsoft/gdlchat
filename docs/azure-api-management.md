@@ -5,11 +5,14 @@ to chat messages.
 
 ## Before you begin
 
-- Create an APIM instance that supports WebSocket APIs. Follow the
+- Create an APIM instance. ( Except for the Consumption tier which doesn't support WebSockets ).
+
   [APIM quickstart](https://learn.microsoft.com/en-us/azure/api-management/get-started-create-service-instance).
-  The Consumption tier does not support WebSocket APIs.
-- Deploy the chat service to Azure Container Apps (ACA). Follow the
-  [Container Apps guide](azure-container-apps.md).
+
+- Deploy the chat service to Azure Container Apps (ACA).
+
+  [See the previous deployment step](../README.md#deploy-azure-container-registry-and-container-apps).
+
 - Make sure APIM can reach the app's ingress over HTTPS and WSS on port 443.
 
 ## Serve the Blazor UI

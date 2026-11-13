@@ -3,60 +3,71 @@
 Deploy your chat service image to Azure Container Apps, configure chat routing,
 and publish updates.
 
-This setup uses a managed identity to pull the image from Azure Container
-Registry (ACR), a single replica to keep conversation state in memory, and
-HTTPS ingress.
+This application runs an image from Azure Container Registry (ACR) and connects
+anonymously to a **Microsoft Copilot Studio agent** through Direct Line.
 
 > [!IMPORTANT]
-> The chat allows anonymous access. Restrict network access or add access
-> controls before making it available publicly.
+> Follow the [Copilot Studio setup guide](copilot-studio-setup.md) to configure
+> and publish the agent with anonymous access enabled.
 
 ## Prerequisites
 
-- Install Azure CLI, sign in, and create a Container Apps environment. Follow
-  the [Container Apps CLI tutorial](https://learn.microsoft.com/en-us/azure/container-apps/tutorial-deploy-first-app-cli).
-- Build and publish your image to ACR. Follow the
-  [Azure Container Registry guide](azure-container-registry.md).
-- Create a user-assigned managed identity and give it the `AcrPull` role on
-  your registry. Follow the
-  [managed identity image-pull guide](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
+- Azure CLI installed and signed in to your Azure subscription.
+- Access to the Azure portal with permission to deploy Container Apps.
+- A chat service image published to ACR ([build guide](azure-container-registry.md)).
 
-Set the following values to match your Azure resources and image version:
+For the CLI commands later in this guide, set these values to match your Azure
+resources and image version:
 
 ```bash
-export SUBSCRIPTION_ID="<subscription-id>"
+# Azure CLI deployment settings
 export ACRGROUP="gdlchat-rg"
-export LOCATION="eastus"
-export ACR="gdlchatacr1234"
-export ACA_ENV="gdlchat-env"
 export APP="gdlchat"
-export IDENTITY="${APP}-acr-pull"
+
+# Container image
+export ACR="gdlchatacr1234"
 export VERSION="v1"
 ```
 
 ## Create the Container App
 
-From your shell, run the following command to deploy the image. The app listens
-on port `8080` and serves the interface at `/chat/`.
+Follow the [Azure portal quickstart](https://learn.microsoft.com/en-us/azure/container-apps/quickstart-portal)
+to create the Container App. Use the resource group and app name set above.
+Create or select a Container Apps environment in the portal.
+
+On the **Container** tab, select **Azure Container Registry** as the image source
+and choose your registry, the `copilot-chat` image, and your version tag instead
+of the quickstart image. Configure registry authentication using the portal's
+[managed identity setup](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull?pivots=portal).
+
+Enable ingress, allow traffic from anywhere, and set the target port to `8080`
+with transport `auto`.
+
+Set both **minimum replicas** and **maximum replicas** to `1` for the in-memory
+conversation backend. Restarting the app or deploying a new revision resets
+conversation state.
+
+**TBD:**
+If multiple replicas are needed, the conversation backend must be redesigned
+to share state and coordinate active conversations across replicas. Blazor
+connections also require session affinity so each session stays on the same
+replica.
+
+## Set environment variables
+
+The container image includes the settings from `appsettings.json`. After creating
+the Container App, you can override these settings for this deployment with
+environment variables. Settings in `appsettings.json` are hierarchical, while
+environment variables are flat name-value pairs. Use `__` to represent each level
+of nesting: for example, `ChatGateway.Enabled` in JSON settings maps to
+`ChatGateway__Enabled` as the environment variable name. Run the following command
+to set the deployment overrides:
 
 ```bash
-ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)
-IDENTITY_ID=$(az identity show --name "$IDENTITY" --resource-group "$ACRGROUP" --query id --output tsv)
-
-az containerapp create \
+az containerapp update \
   --name "$APP" \
   --resource-group "$ACRGROUP" \
-  --environment "$ACA_ENV" \
-  --image "$ACR_LOGIN_SERVER/copilot-chat:$VERSION" \
-  --user-assigned "$IDENTITY_ID" \
-  --registry-server "$ACR_LOGIN_SERVER" \
-  --registry-identity "$IDENTITY_ID" \
-  --ingress external \
-  --target-port 8080 \
-  --transport auto \
-  --min-replicas 1 \
-  --max-replicas 1 \
-  --env-vars \
+  --set-env-vars \
     ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_HTTP_PORTS=8080 \
     useAPIM=true \
@@ -66,9 +77,6 @@ az containerapp create \
 The `useAPIM` setting controls the interface path: `true` uses `/chat/`, and
 `false` uses `/`. Chat messages connect directly to the agent until you enable
 Azure API Management (APIM) routing below.
-
-Keep one replica for the in-memory conversation backend. Restarting the app
-or deploying a new revision resets conversation state.
 
 ## Configure APIM message routing
 
