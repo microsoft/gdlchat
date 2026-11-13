@@ -1,7 +1,7 @@
 # Build, Run, and Deploy the Chat Service
 
 This guide covers building and running the .NET service, building its container,
-and configuring the optional Azure API Management (APIM) chat gateway. To create
+and configuring the Azure API Management (APIM) chat gateway. To create
 and publish an agent and configure its Direct Line connection, see
 [Copilot Studio setup](docs/copilot-studio-setup.md).
 
@@ -29,8 +29,9 @@ at **http://localhost:5093/**. To select a different local port explicitly:
 ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --urls http://localhost:5191
 ```
 
-Use a free port; do not stop an unrelated process to reuse one. The optional
-authenticated SDK mode and browser sign-in flow are described under
+Choose a free port. Don't stop an unrelated process to free one up.
+
+The authenticated SDK mode and browser sign-in flow are described under
 [Connection](README.md#connection) and
 [Developer Sign-In](README.md#developer-sign-in); neither is needed for the
 default Direct Line setup.
@@ -97,7 +98,7 @@ between multiple bot messages can leave later messages for the next request.
 | A request times out | The page cancels after 90 seconds. Check agent execution, tool connections, and server outbound WebSocket connectivity. |
 | Routine HTTP logs are too verbose | Development settings filter `System.Net.Http.HttpClient.direct-line` to `Warning`. Set that category to `Information` when diagnosing HTTP setup failures. |
 | Failed to determine the HTTPS port | The HTTP-only local run has no HTTPS redirect target. This warning is separate from Direct Line authentication or message delivery. |
-| Package vulnerability warnings appear during build | They are dependency advisories, not agent-authentication failures. The existing warnings were not resolved as part of this connection setup. |
+| Package vulnerability warnings appear during build | These are dependency advisories, not agent authentication failures. This connection setup doesn't resolve them. |
 
 ## Build and Push a Container
 
@@ -162,8 +163,8 @@ In APIM, select **APIs > Add API > OpenAPI** and import
 | Subscription required | On |
 | Web service URL | `https://<aca-host>/chat/api/chat` |
 
-Confirm that `POST /messages` appears. This API handles chat messages; UI
-routing is a separate, optional APIM configuration.
+Confirm that `POST /messages` appears. This API handles chat messages. UI
+routing is configured separately.
 
 ### 2. Create the backend secret
 
@@ -229,8 +230,8 @@ continuity. Additional requests are in `apim/chat-api.http`.
 After the policy tests pass, set `ChatGateway__Enabled=true` in the Container
 App and apply the new revision. Refresh the chat page and send a normal message
 to verify the response. A message containing `policy-block-test` should display
-“The chat gateway blocked this request.” Typing indicators are not displayed in
-gateway mode because APIM returns completed replies before the UI displays them.
+“The chat gateway blocked this request.” Typing indicators don't appear in
+gateway mode, because APIM returns each reply only after it's complete.
 
 ## References
 

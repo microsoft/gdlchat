@@ -64,8 +64,8 @@ appear under **Settings > Security > Authentication**. Use the labels present
 in your experience rather than looking for the older navigation in the preview
 UI.
 
-Authentication changes take effect after publishing. This configuration lets
-anyone with access to the agent's anonymous channel interact with it.
+Authentication changes take effect after publishing. After that, anyone who can
+reach the agent's anonymous channel can chat with it.
 
 ## Identify the agent
 
@@ -88,9 +88,8 @@ The URL identifies:
 The schema name is distinct from the display name and bot record ID. Use the
 value after `/bots/` in the generated URL.
 
-The hosted webchat is useful for discovering and testing the connection. Do not
-paste its iframe into this project: the requirement here is server-side C#
-access.
+The hosted webchat is useful for finding and testing the connection. Don't paste
+its iframe into this project, because the app connects from the server.
 
 ## Capture the anonymous endpoints
 

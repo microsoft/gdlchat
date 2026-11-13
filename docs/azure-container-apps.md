@@ -78,7 +78,7 @@ to create these secrets in the Container App's **Secrets** page:
 - `chat-backend-key`: the same backend credential used by APIM's named value.
 - `chat-apim-subscription-key`: a separate, API-scoped APIM subscription key.
 
-Do not put secret values in shell history, image build arguments, or source
+Keep secret values out of shell history, image build arguments, and source
 control. Set the environment variables using secret references:
 
 ```bash

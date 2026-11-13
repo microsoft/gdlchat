@@ -73,11 +73,11 @@ Blazor server -> APIM POST /chat-api/messages
    OpenAPI API** for chat message routing. Use API URL suffix `chat-api` and
    backend URL `https://<aca-host>/chat/api/chat`. The import creates
    `POST /messages` and its request/response schemas. This is separate from the
-   optional UI routing described in [Serve the Blazor UI](#serve-the-blazor-ui).
+   UI routing described in [Serve the Blazor UI](#serve-the-blazor-ui).
    For the APIM import workflow, see Microsoft's
    [OpenAPI import guide](https://learn.microsoft.com/en-us/azure/api-management/import-api-from-oas).
 2. Leave **Subscription required** on for `chat-api`. Create a dedicated,
-   active API-scoped subscription for the Blazor server. For the optional UI
+   active API-scoped subscription for the Blazor server. For the UI
    APIs, keep subscriptions off as described in
    [Serve the Blazor UI](#serve-the-blazor-ui). No chat-user login is needed.
 3. Generate a separate random backend credential (at least 32 random bytes,
@@ -103,11 +103,10 @@ Blazor server -> APIM POST /chat-api/messages
    and `ChatGateway__BackendKey` to Container App secret references. See
    [Container App configuration](azure-container-apps.md#configure-apim-message-routing).
 
-These settings are intentionally not populated with secrets in
-[appsettings.json](../appsettings.json). Rotate the two credentials
-independently. For `useAPIM=false`, the backend URL loses its `/chat` prefix;
-update the APIM backend URL accordingly. A local UI calls the configured APIM
-endpoint, not an automatic local substitute.
+[appsettings.json](../appsettings.json) doesn't contain these secrets. Rotate
+the two credentials independently. For `useAPIM=false`, the backend URL loses its
+`/chat` prefix, so update the APIM backend URL to match. A local UI still calls the
+configured APIM endpoint.
 
 ### Test the policies
 
