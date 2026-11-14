@@ -44,12 +44,15 @@ and WebSocket stream URLs.
 
 ## Override settings
 
-Environment variables take precedence over both settings files. Replace `:`
-with `__` in variable names, for example `ChatGateway__Enabled=false`.
+The container image includes the default settings from [appsettings.json](../appsettings.json).
+Environment variables take precedence over both settings files, so you can
+override individual settings without rebuilding the image. JSON settings are
+hierarchical, while environment variables are flat name-value pairs. Replace
+`:` with `__` for each nesting level, for example `ChatGateway__Enabled=false`.
 
 For local development, set `useAPIM` and `ChatGateway:Enabled` to `false`, as
 shown in [Build and Run](../development.md#build-and-run). See the
-[APIM guide](azure-api-management.md#configure-the-chat-api) for gateway
+[APIM chat routing guide](configure-apim-chat-routing.md) for gateway
 settings. Store local client secrets with .NET user secrets, not in committed
 configuration. Use secret references for gateway credentials in Azure.
 
@@ -80,6 +83,20 @@ The output is configuration data, not a shell script. Running the converter
 does not export variables or update Azure resources.
 
 ### Update Azure Container Apps
+
+To update individual settings, replace the example app name, resource group,
+and settings below with your values:
+
+```bash
+az containerapp update \
+   --name "<container-app-name>" \
+   --resource-group "<resource-group>" \
+   --set-env-vars \
+      Setting_1_Name=value \
+      Section__Setting_2_Name=value
+```
+
+To apply settings from the converter output:
 
 1. Save the converted settings to a file:
 

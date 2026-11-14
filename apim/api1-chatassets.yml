@@ -1,0 +1,36 @@
+openapi: 3.0.1
+info:
+  title: chat-web
+  description: ''
+  version: '1.0'
+servers:
+  - url: https://nvmtr2apim.azure-api.net/chat
+paths:
+  /:
+    get:
+      summary: Home
+      description: main page
+      operationId: home
+      responses:
+        '200':
+          description: ''
+  /*:
+    get:
+      summary: Assets and Pages
+      operationId: assets-and-pages
+      responses:
+        '200':
+          description: ''
+components:
+  securitySchemes:
+    apiKeyHeader:
+      type: apiKey
+      name: Ocp-Apim-Subscription-Key
+      in: header
+    apiKeyQuery:
+      type: apiKey
+      name: subscription-key
+      in: query
+security:
+  - apiKeyHeader: [ ]
+  - apiKeyQuery: [ ]

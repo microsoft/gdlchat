@@ -7,14 +7,17 @@ This application runs an image from Azure Container Registry (ACR) and connects
 anonymously to a **Microsoft Copilot Studio agent** through Direct Line.
 
 > [!IMPORTANT]
-> Follow the [Copilot Studio setup guide](copilot-studio-setup.md) to configure
-> and publish the agent with anonymous access enabled.
+> Complete the [Copilot Studio setup guide](copilot-studio-setup.md) before
+> starting this guide.
 
 ## Prerequisites
 
 - Azure CLI installed and signed in to your Azure subscription.
 - Access to the Azure portal with permission to deploy Container Apps.
 - A chat service image published to ACR ([build guide](azure-container-registry.md)).
+- A published Copilot Studio agent with anonymous access enabled, and its
+  `TokenEndpoint` and `DirectLineEndpoint` values recorded
+  ([setup guide](copilot-studio-setup.md)).
 
 For the CLI commands later in this guide, set these values to match your Azure
 resources and image version:
@@ -55,84 +58,29 @@ to share state and coordinate active conversations across replicas. Blazor
 connections also require session affinity so each session stays on the same
 replica.
 
-## Set environment variables
+## Connect the Container App to Copilot Studio
 
-The container image includes the settings from `appsettings.json` and is embedded 
-into the running application.  If you need to override specific settings, you can 
-define them as environment variables. Settings in `appsettings.json` are hierarchical, 
-while environment variables are flat name-value pairs. Use `__` to represent each level
-of nesting: for example, `ChatGateway.Enabled` in JSON settings maps to
-`ChatGateway__Enabled` as the environment variable name.
+The [Copilot Studio setup guide](copilot-studio-setup.md) should already be
+complete. If it isn't, complete it now, then record the two endpoint URLs from
+its [Capture the anonymous endpoints](copilot-studio-setup.md#capture-the-anonymous-endpoints)
+section.
 
-To update specific settings, use the following command, replacing the example
-names and values with the settings you want to override:
+Update the Container App to override the two endpoint settings with your
+agent's URLs. The command below uses the example agent's URLs. Replace them
+with the URLs from your own agent, including the regional Direct Line URL.
 
 ```bash
 az containerapp update \
   --name "$APP" \
   --resource-group "$APPGROUP" \
   --set-env-vars \
-    Setting_1_Name=value \
-    Section__Setting_2_Name=value
+    CopilotStudioAgent__TokenEndpoint='<!-- token endpoint -->' \
+    CopilotStudioAgent__DirectLineEndpoint='<!-- direct line endpoint -->'
 ```
 
-## Configure APIM message routing
+Environment variable changes create a new revision and retarts the **ACA**.
 
-As deployed, the chat application connects directly to the **Microsoft Copilot
-Studio agent**. To enable routing through APIM, we will configure the APIM
-endpoint, secure calls to APIM with a subscription key, and secure calls from
-APIM to the chat backend with a shared key stored as an APIM secret named value
-and a Container App secret.
-
-### Routing
-
-### Secure
-
-### Named Value
-
-### ACA Secret
-
-
-
-
-- **chat-backend-key:** Allows the APIM to securely call the client.
-- **chat-apim-subscription-key:** Allows the client to call the APIM.
-
-
-- **and so we will need to tell the chat application 2 things
-
-(APIM) routing.
-
-1. Follow the [Azure API Management guide](azure-api-management.md) to create
-   the chat API, configure its credentials, and test its policies.
-2. In your Container App, open **Secrets** and create the following entries.
-   See [Manage secrets in Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
-   for instructions.
-
-   - `chat-backend-key`: the same backend credential stored in APIM's named value.
-   - `chat-apim-subscription-key`: a separate subscription key scoped to the chat API.
-
-3. Replace `<apim-host>` below with your APIM hostname, then run the command to
-   enable routing. Keep secret values out of shell history, build arguments,
-   and source control; use the secret references shown here.
-
-```bash
-export CHAT_GATEWAY_ENDPOINT="https://<apim-host>/chat-api/messages"
-
-az containerapp update \
-  --name "$APP" \
-  --resource-group "$APPGROUP" \
-  --set-env-vars \
-    useAPIM=true \
-    ChatGateway__Enabled=true \
-    ChatGateway__Endpoint="$CHAT_GATEWAY_ENDPOINT" \
-    ChatGateway__BackendKey=secretref:chat-backend-key \
-    ChatGateway__SubscriptionKey=secretref:chat-apim-subscription-key
-```
-
-Keep `ChatGateway__Enabled=false` until the API and policy tests pass.
-For other configuration changes, see
-[Application settings](appsettings.md#update-azure-container-apps).
+For the full list of settings, see [appsettings.md](appsettings.md).
 
 ## Verify and update the deployment
 
@@ -146,23 +94,9 @@ az containerapp show \
   --output tsv
 ```
 
-The `useAPIM` setting controls the interface path: `true` uses `/chat/`, and
-`false` uses `/`.
+## Next steps
 
-Open `https://<app-host>/chat/`, replacing `<app-host>` with the returned hostname.
-If you set `useAPIM=false`, open `https://<app-host>/` instead. Send a message
-to check the agent connection.
+The base image is deployed. Before you configure the **ACA** app for APIM
+routing, complete the APIM configuration steps in the
+[Azure API Management guide](azure-api-management.md). Then continue onto the [APIM chat routing](configure-apim-chat-routing.md) steps.
 
-To publish an update:
-
-1. Set `VERSION` to a new image tag and follow the
-   [ACR build and push steps](azure-container-registry.md#build-and-push-the-image).
-2. Update the app to use that image:
-
-```bash
-ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --resource-group "$ACRGROUP" --query loginServer --output tsv)
-az containerapp update \
-  --name "$APP" \
-  --resource-group "$APPGROUP" \
-  --image "$ACR_LOGIN_SERVER/copilot-chat:$VERSION"
-```
