@@ -56,7 +56,7 @@ Before you start, you need:
 
 Configure each component in the order below.
 
-### Copilot Studio agent
+### Deploy Copilot Studio agent
 
 The copilot agent has extensive capabilities ( not covered in this guide ). Once it has 
 been configured, we will need its direct line endpoint and a token URL so that the chat 
@@ -70,7 +70,22 @@ the agent's Direct Line channel.
 Follow the [Copilot Studio setup guide](docs/copilot-studio-setup.md) to configure
 the agent and get these URLs. You'll add them to the application settings later.
 
-### Azure API Management
+### Deploy Azure Container Registry and Container Apps
+
+The **Azure Container Registry** stores the chat server's container image, and **Azure
+Container Apps** runs that image with the chat settings.
+
+- **Azure Container Registry:** Needed for application images published from this repo.
+
+Follow the [Container Registry guide](docs/azure-container-registry.md)
+to build and push the image
+
+- **Azure Container Apps:** Uses the uploaded container image to run the chat server.
+
+Follow the [Container Apps guide](docs/azure-container-apps.md)
+to deploy the clhat server and then and configure the chat settings.
+
+### Deploy Azure API Management
 
 This setup uses APIM to expose the chat interface to users and apply configurable
 policies to each conversation turn.
@@ -85,15 +100,6 @@ policies to each conversation turn.
 Follow the [APIM setup guide](docs/azure-api-management.md) to configure these APIs
 and the shared key in your existing APIM instance.
 
-### Azure Container Registry and Container Apps
-
-The **Azure Container Registry** stores the chat server's container image and the **Azure Container
-Apps** runs that image with the chat settings.
-
-Create or reuse a registry and a Container Apps environment in the same
-subscription. Follow the [Container Registry guide](docs/azure-container-registry.md)
-to build and push the image, then the [Container Apps guide](docs/azure-container-apps.md)
-to deploy it and configure the chat settings.
 
 ### Local development
 
