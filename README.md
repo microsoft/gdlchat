@@ -1,47 +1,58 @@
-# Copilot Studio Chat
+# Governed Direct Line Chat
 
-This repository contains a chat client for Copilot Studio agents, deployed with
-Azure API Management (APIM) for governance and observability.
+A server-side chat client for Microsoft Copilot Studio agents, fronted by Azure API Management (APIM) for governance and observability.
+
+## Why
+
+Copilot Studio agents can be published for anonymous access, but this option has two gaps:
+
+- **Limited traffic control.** Built-in rate limiting is minimal.
+- **Exposed connection details.** The Direct Line endpoint and conversation tokens are visible in the browser's network traffic.
+
+Direct Line is also more involved than a typical chat API. It uses conversation tokens, a WebSocket stream and watermark-based reconnection. This client handles all of that on the server, so the browser doesn't have to.
+
+## What you get
+
+- **One entry point.** All traffic enters through APIM.
+- **Nothing sensitive in the browser.** Agent connection details and conversation tokens stay on the server.
+- **Central governance.** Subscription checks, rate limits, request validation and diagnostics are configured once, in APIM.
+- **No code changes to extend.** Add APIM policies without touching the chat code.
+
 
 ## Architecture
 
-- APIM forwards browser requests to the Blazor chat server.
-- The server sends chat messages through APIM policies to the protected chat
-  backend.
-- The backend connects to the Copilot Studio agent through Direct Line.
-
-## Benefits
-
-Copilot Studio supports anonymous access, but it offers limited rate limiting, and
-its Direct Line endpoint is visible in browser network traffic. The agent also uses a
-more complex Direct Line protocol than typical chat bots, with conversation tokens,
-a server-side WebSocket stream, and watermark-based reconnection. This client handles
-that protocol on the server, so the browser doesn't need to.
-
-With this architecture, APIM is the entry point, and agent connection details and
-conversation tokens stay on the server, out of the browser. APIM also adds governance
-in one place, including subscription checks, rate limits, request validation, and
-diagnostics. You can extend these controls with more policies without changing the
-chat code.
+1. The browser loads the chat UI from the Blazor server through APIM.
+2. The Blazor server sends each chat message through APIM to the protected chat backend.
+3. The backend connects to the Copilot Studio agent through Direct Line.
 
 ## APIM governance
 
-In this architecture, governance is configured in APIM at both touch points: the request
-before it is forwarded to the agent, and the reply before it returns to the page. Policies defined
-there apply to all chat traffic without any changes to the chat code. The diagram below
-shows where those policies run.
+APIM applies policies at two points:
 
-APIM policies cover the most common governance needs for an API. They can limit call rates
-and quotas, restrict callers by IP address or identity token, validate request and response
-content against a schema, and rewrite headers or bodies. They can also route traffic across
-backends, cache responses, and send logs and metrics to monitoring tools. The sample setup
-uses a small subset of these policies to show the pattern.
+- **Inbound:** on each request, before it reaches the chat backend.
+- **Outbound:** on each reply, before it returns to the Blazor server.
+
+These policies apply to all chat traffic without any change to the chat code. The diagram below shows where they run.
+
+![Swim-lane diagram of the Copilot chat request flow through the browser, APIM, Blazor server, chat API, backend, and Copilot agent](docs/images/copilot-chat-swimlane.png)
+
+APIM policies cover most API governance needs:
+
+| Need | Examples |
+|---|---|
+| Traffic control | Rate limits, quotas |
+| Access control | IP filtering, token validation |
+| Content safety | Schema validation, header and body rewriting |
+| Resilience and performance | Backend routing, response caching |
+| Observability | Logs and metrics to monitoring tools |
+
+This sample uses a small subset to show the pattern.
 
 To learn more, read the [APIM policy overview](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-policies)
 and the [policy reference](https://learn.microsoft.com/en-us/azure/api-management/api-management-policies).
 
 
-![Swim-lane diagram of the Copilot chat request flow through the browser, APIM, Blazor server, chat API, backend, and Copilot agent](docs/images/copilot-chat-swimlane.png)
+
 
 ## Installation
 
